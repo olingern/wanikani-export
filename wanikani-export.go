@@ -22,8 +22,8 @@ const ErrorColor = "\033[1;31m%s\033[0m"
 // InfoColor yellow
 const InfoColor = "\033[1;33m%s\033[0m"
 
-func getAPIResponse(level string) (apiResp APIResponse, err error) {
-	token := "a3020bbe-c9a3-4b90-89f2-7c0fdc4441c5"
+func getAPIResponse(token string, level string) (apiResp APIResponse, err error) {
+
 	path := "https://api.wanikani.com/v2/subjects?levels=" + level
 
 	req, err := http.NewRequest("GET", path, nil)
@@ -129,23 +129,26 @@ func createCSV(objectType string, resp APIResponse) {
 }
 
 func main() {
-
+	tPtr := flag.String("token", "", "Your wanikani API token")
 	lPtr := flag.String("level", "", "Desired levels. ex. --level=9,10")
 	kPtr := flag.Bool("kanji", false, "Create a kanji CSV")
 	vPtr := flag.Bool("vocab", false, "Create a vocabulary CSV")
 	sPtr := flag.Bool("sentence", false, "Create a sentence CSV")
 	flag.Parse()
 
+	if len(*tPtr) < 1 {
+		log.Fatalf(ErrorColor, "You must provide a wanikani API token")
+	}
+
 	if len(*lPtr) < 1 {
-		log.Fatal("You must provide a level option as an argument")
+		log.Fatalf(ErrorColor, "You must provide a level option as an argument")
 	}
 
 	if len(strings.Split(*lPtr, ",")) > 5 {
-		fmt.Printf(InfoColor, "WARNING: More than 4 levels not suppported.\n")
-		os.Exit(0)
+		log.Fatalf(InfoColor, "More than 4 levels not suppported.\n")
 	}
 
-	resp, err := getAPIResponse(*lPtr)
+	resp, err := getAPIResponse(*tPtr, *lPtr)
 
 	if err != nil {
 		os.Exit(1)

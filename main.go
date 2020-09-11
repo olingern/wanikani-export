@@ -3,14 +3,26 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 )
 
-func getAPIResponse(level string) ApiResponse {
+// SuccessColor green
+const SuccessColor = "\033[1;32m%s\033[0m"
+
+//ErrorColor red
+const ErrorColor = "\033[1;31m%s\033[0m"
+
+// InfoColor yellow
+const InfoColor = "\033[1;33m%s\033[0m"
+
+func getAPIResponse(level string) (apiResp APIResponse, err error) {
 	token := "a3020bbe-c9a3-4b90-89f2-7c0fdc4441c5"
 	path := "https://api.wanikani.com/v2/subjects?levels=" + level
 
@@ -27,14 +39,19 @@ func getAPIResponse(level string) ApiResponse {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Request error")
-		log.Fatal(err)
+		return apiResp, err
 	}
-
-	var apiResp ApiResponse
 
 	json.NewDecoder(resp.Body).Decode(&apiResp)
 
-	return apiResp
+	if apiResp.Code > 400 {
+		fmt.Printf(ErrorColor, "API Request error: "+apiResp.Error+"\n")
+		fmt.Printf(InfoColor, "Is your API key correct?\n")
+		fmt.Printf(InfoColor, "https://www.wanikani.com/settings/personal_access_tokens\n")
+		return apiResp, errors.New(apiResp.Error)
+	}
+
+	return apiResp, nil
 }
 
 func getReadingType(readingType string) string {
@@ -57,7 +74,25 @@ func createFile(filename string, output []string) {
 	w.Flush()
 }
 
-func createCSV(objectType string, resp ApiResponse) {
+func createSentenceCSV(resp APIResponse) {
+	var d KanjiData
+	var out = make([]string, 0)
+
+	for i := 0; i < len(resp.Data); i++ {
+
+		d = resp.Data[i].Data
+
+		for j := 0; j < len(d.ContextSentences); j++ {
+			s := strconv.Quote(d.ContextSentences[j].Ja) + "," + strconv.Quote(d.ContextSentences[j].En)
+
+			out = append(out, s)
+		}
+	}
+
+	createFile("sentences", out)
+}
+
+func createCSV(objectType string, resp APIResponse) {
 	var d KanjiData
 	var r string = ""
 	var m string = ""
@@ -105,17 +140,29 @@ func main() {
 		log.Fatal("You must provide a level option as an argument")
 	}
 
-	resp := getAPIResponse(*lPtr)
+	if len(strings.Split(*lPtr, ",")) > 5 {
+		fmt.Printf(InfoColor, "WARNING: More than 4 levels not suppported.\n")
+		os.Exit(0)
+	}
+
+	resp, err := getAPIResponse(*lPtr)
+
+	if err != nil {
+		os.Exit(1)
+	}
 
 	if *kPtr {
 		createCSV("kanji", resp)
+		fmt.Printf(SuccessColor, "✔️ Kanji CSV written\n")
 	}
 
 	if *vPtr {
 		createCSV("vocabulary", resp)
+		fmt.Printf(SuccessColor, "✔️ Vocabulary CSV written\n")
 	}
 
 	if *sPtr {
-		createCSV("context_sentences", resp)
+		createSentenceCSV(resp)
+		fmt.Printf(SuccessColor, "✔️ Sentence CSV written\n")
 	}
 }
